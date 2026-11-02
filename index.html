@@ -1275,26 +1275,33 @@
         function setupRealtimeFirebase() {
             if (!db) { setupHttpCloudSync(); return; }
 
-            // Lakukan Autentikasi Anonim agar Firebase menyetujui izin Akses Tulis/Baca
-            firebase.auth().signInAnonymously()
-                .then(() => {
-                    const dbRef = db.ref(DB_ROOT_PATH);
-                    dbRef.on('value', (snapshot) => {
-                        const cloudData = snapshot.val();
-                        cloudSyncMode = "firebase";
-                        updateSyncUI(true, "Terhubung Cloud (Firebase)");
-                        if (cloudData) {
-                            applyRemoteState(cloudData);
-                        }
-                    }, (error) => {
-                        console.warn("Realtime Database error, switching to HTTP Shared Cloud Sync:", error.message);
-                        setupHttpCloudSync();
-                    });
-                })
-                .catch((error) => {
-                    console.warn("Autentikasi Anonim gagal, beralih ke HTTP Backup:", error.message);
-                    setupHttpCloudSync();
-                });
+            // Menggunakan REST/SDK Listener Firebase Realtime yang sinkron lintas perangkat
+            const dbRef = db.ref(DB_ROOT_PATH);
+
+            // 1. Ambil data saat ini dari cloud untuk menyelaraskan perangkat baru secara instan
+            dbRef.once('value').then((snapshot) => {
+                const cloudData = snapshot.val();
+                if (cloudData) {
+                    applyRemoteState(cloudData);
+                }
+                updateSyncUI(true, "Terhubung Cloud (Firebase)");
+            }).catch((err) => {
+                console.warn("Koneksi awal Firebase gagal, beralih ke HTTP Backup:", err);
+                setupHttpCloudSync();
+            });
+
+            // 2. Pasang Listener Realtime untuk mendengarkan perubahan dari perangkat lain
+            dbRef.on('value', (snapshot) => {
+                const cloudData = snapshot.val();
+                cloudSyncMode = "firebase";
+                updateSyncUI(true, "Terhubung Cloud (Firebase)");
+                if (cloudData) {
+                    applyRemoteState(cloudData);
+                }
+            }, (error) => {
+                console.warn("Realtime Database listener error, switching to HTTP Shared Cloud Sync:", error.message);
+                setupHttpCloudSync();
+            });
         }
 
         function initFirebase() {
